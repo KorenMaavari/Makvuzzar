@@ -41,10 +41,10 @@ def max_gpu(A, B):
         element-wise maximum between A and B
     """
     d_A, d_B = cuda.to_device(A), cuda.to_device(B)
-    d_C = cuda.device_array(shape=A.shape, dtype=A.dtype)
+    d_C = cuda.to_device(np.zeros_like(A))
 
     max_kernel[1000, 1000](d_A, d_B, d_C)
-    return d_C
+    return d_C.copy_to_host()
 
 @cuda.jit
 def max_kernel(A, B, C):

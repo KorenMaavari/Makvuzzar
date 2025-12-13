@@ -19,24 +19,22 @@ def matmul_transpose_trivial(X):
 
 @njit(parallel=True)
 def matmul_transpose_numba(X):
-    n, m = X.shape[0], X.shape[1]
-    ret = np.empty(shape=(n, n), dtype=X.dtype)
+    n, m = X.shape
+    ret = np.zeros((n, n))
     for x in prange(n):
-        for y in range(n):
-            tmp = 0
-            for k in range(m):
-                tmp += X[x, k] * X[y, k]
-            ret[x, y] = tmp
+        for y in prange(n):
+            for k in prange(m):
+                ret[x, y] += X[x, k] * X[y, k]
 
     return ret
 
 
 def matmul_transpose_gpu(X):
-    n = X.shape[0]
+    n, m = X.shape
     d_X = cuda.to_device(X)
-    d_ret = cuda.device_array(shape=(n, n), dtype=X.dtype)
+    d_ret = cuda.to_device(np.zeros((n, n)))
     matmul_kernel[1, 1024](d_X, d_ret)
-    return d_ret
+    return d_ret.copy_to_host()
 
 @cuda.jit
 def matmul_kernel(A, C):

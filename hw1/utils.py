@@ -68,7 +68,7 @@ def zeros_biases(sizes):
     -------
     list of zero np arrays bias matrices
     """
-    return [np.zeros(shape=(1, sizes[i])) for i in range(len(sizes))]
+    return [np.zeros(shape=(sizes[i],)) for i in range(len(sizes))]
 
 
 def create_batches(data, labels, batch_size):
@@ -103,7 +103,7 @@ def add_elementwise(list1, list2):
     -------
     list of sum of each two elements by index
     """
-    return list1 + list2
+    return [a + b for a, b in zip(list1, list2)]
 
 
 def xavier_initialization(m, n):
