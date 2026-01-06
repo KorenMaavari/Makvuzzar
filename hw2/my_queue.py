@@ -16,7 +16,7 @@ class MyQueue(object):
     def __init__(self):
         """Initialize MyQueue and its members."""
         self.put_lock = Lock()
-        self.recv_conn, self.send_conn = Pipe()
+        self.recv_conn, self.send_conn = Pipe(duplex=False)
 
     def put(self, msg):
         """Put the given message in queue.
@@ -36,9 +36,7 @@ class MyQueue(object):
         ------
         An object
         """
-        while True:
-            if not self.empty():
-                return self.recv_conn.recv()
+        return self.recv_conn.recv()
 
     def empty(self):
         """Get whether the queue is currently empty

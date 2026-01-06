@@ -61,7 +61,7 @@ class Worker(multiprocessing.Process):
         img = image.reshape(28, 28)
         # rotate, reshape=False keeps the output shape
         rotated = scipy_rotate(
-            img, angle, reshape=False, order=1, mode="constant", cval=0.0
+            img, angle, reshape=False, mode="constant", cval=0.0
         )
         return rotated.flatten()
 
@@ -85,7 +85,7 @@ class Worker(multiprocessing.Process):
         """
         img = image.reshape(28, 28)
         # shift dx cells left and dy cells up (negative direction)
-        shifted = scipy_shift(img, shift=(-dy, -dx), order=1, mode="constant", cval=0.0)
+        shifted = scipy_shift(img, [dy, dx], mode="constant", cval=0.0)
         return shifted.flatten()
 
     @staticmethod
@@ -129,14 +129,12 @@ class Worker(multiprocessing.Process):
         # result[i][j] = image[i][j + i*tilt], so input coord is [i, j + i*tilt]
         # affine_transform: output[i,j] = input[matrix @ [i,j] + offset]
         # We need matrix @ [i,j] = [i, j + i*tilt] = [[1,0],[tilt,1]] @ [i,j]
-        skewed = affine_transform(
-            img,
-            matrix=[[1, 0], [tilt, 1]],
-            offset=0,
-            order=1,
-            mode="constant",
-            cval=0.0,
-        )
+        skewed = np.zeros_like(img)
+        for row in range(28):
+            for col in range(28):
+                skew_col = int(col + row * tilt)
+                if 0 <= skew_col < 28:
+                    skewed[row][col] = reshaped_img[row][skew_col]
         return skewed.flatten()
 
     def process_image(self, image):
@@ -155,20 +153,20 @@ class Worker(multiprocessing.Process):
         """
         img = image.copy()
         # Apply random rotation between -20 and +20 degrees
-        angle = random.uniform(-20, 20)
+        angle = random.randint(-10, 10)
         img = self.rotate(img, angle)
 
         # Apply random shift between -2 and +2 pixels in both axes
-        dx = random.uniform(-2, 2)
-        dy = random.uniform(-2, 2)
+        dx = random.randint(-2, 2)
+        dy = random.randint(-2, 2)
         img = self.shift(img, dx, dy)
 
         # Apply random skew between -0.2 and +0.2
-        tilt = random.uniform(-0.2, 0.2)
+        tilt = random.uniform(-0.1, 0.1)
         img = self.skew(img, tilt)
 
         # Apply random noise with noise amplitude between 0 and 0.2
-        noise_amp = random.uniform(0, 0.2)
+        noise_amp = random.uniform(0.0, 0.15)
         img = self.add_noise(img, noise_amp)
 
         # Make sure pixel values are clipped between 0 and 1
@@ -180,23 +178,23 @@ class Worker(multiprocessing.Process):
         Hint: you can either generate (i.e sample randomly from the training data)
         the image batches here OR in ip_network.create_batches
         """
-        data, labels = self.training_data
         proc_name = self.name
         while True:
             batch_images = []
             batch_labels = []
-            batch_idx = self.jobs.get()
-            for _ in range(self.batch_size):
-                # Poison pill means shutdown
-                idx = random.randint(0, len(data) - 1)
+            job = self.jobs.get()
+            if job is None:  # Poison Pill check
+                self.jobs.task_done()
+                break
 
-                # Append the original image and label
-                batch_images.append(data[idx])
-                batch_labels.append(labels[idx])
+            data, labels = self.training_data
+            # sample indices once per batch
+            indexes = random.sample(range(0, data.shape[0]), self.batch_size)
+            batch_data = data[indexes]
+            batch_labels = labels[indexes]
+            # Only augment, do not append original
+            batch_images = np.array([self.process_image(img) for img in batch_data])
 
-                # Append the augmented image and the same label
-                batch_images.append(self.process_image(data[idx]))
-                batch_labels.append(labels[idx])
             # print(f"{proc_name}: finished batch number {batch_idx}")
             self.results.put((np.array(batch_images), np.array(batch_labels)))
             self.jobs.task_done()

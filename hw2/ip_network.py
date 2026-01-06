@@ -25,8 +25,8 @@ class IPNeuralNetwork(NeuralNetwork):
         # 1. Create Workers
         # (Call Worker() with self.mini_batch_size as the batch_size)
         self.jobs = multiprocessing.JoinableQueue()
-        self.results = multiprocessing.Queue()
-        self.num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", 12))
+        self.results = MyQueue()
+        self.num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count()))
 
         # Start workers
         print(f"Creating {self.num_workers} workers")
@@ -40,8 +40,10 @@ class IPNeuralNetwork(NeuralNetwork):
         # Call the parent's fit. Notice how create_batches is called inside super.fit().
         super().fit(training_data, validation_data)
         # 3. Stop Workers
+        for _ in range(self.num_workers):
+            self.jobs.put(None)  # Send Poison Pill
+        self.jobs.join()  # Wait for jobs to finish
         for w in workers:
-            w.terminate()
             w.join()
 
     def create_batches(self, data, labels, batch_size):
@@ -58,6 +60,4 @@ class IPNeuralNetwork(NeuralNetwork):
         for _ in range(num_jobs):
             ret.append(self.results.get())
 
-        # Now wait for all jobs to finish (task_done already called after each put)
-        self.jobs.join()
         return ret
